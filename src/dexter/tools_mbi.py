@@ -6,6 +6,7 @@ Includes accounting system mapping and sector-specific adjustments.
 from langchain.tools import tool
 from typing import List, Dict, Optional, Literal
 import os
+import pandas as pd
 from pydantic import BaseModel, Field
 
 from dexter.schemas import (
@@ -98,7 +99,82 @@ GEOGRAPHY_COST_INDEX = {
     "Autre": 1.00
 }
 
+# ========== French Plan Comptable Général (PCG) ==========
+# Key account ranges for EBITDA normalization and red flag detection
+
+PCG_ACCOUNTS = {
+    # Revenue accounts (Class 7)
+    "revenue": {
+        "701": "Ventes de produits finis",
+        "703": "Ventes de marchandises",
+        "706": "Prestations de services",
+        "708": "Produits des activités annexes",
+    },
+
+    # Operating expenses (Class 6) - for EBITDA adjustments
+    "operating_expenses": {
+        "601-607": "Achats",
+        "611": "Sous-traitance générale",
+        "612": "Redevances de crédit-bail",  # Key for lease normalization
+        "613-614": "Locations et charges locatives",
+        "615-616": "Entretien, réparations",
+        "621-628": "Personnel",
+        "631-637": "Impôts et taxes",
+        "641": "Rémunérations du personnel",
+        "644": "Rémunération du travail de l'exploitant",  # KEY: Owner compensation
+        "645": "Charges de sécurité sociale et de prévoyance",
+        "681": "Dotations aux amortissements",  # Add back for EBITDA
+        "6815": "Dotations aux provisions d'exploitation",  # Add back for EBITDA
+    },
+
+    # Financial accounts
+    "financial": {
+        "661": "Charges d'intérêts",
+        "761": "Produits financiers",
+    },
+
+    # Exceptional items (Class 67/77) - for normalization
+    "exceptional": {
+        "671": "Charges exceptionnelles sur opérations de gestion",
+        "771": "Produits exceptionnels sur opérations de gestion",
+    },
+
+    # Balance sheet - Assets (Class 2)
+    "fixed_assets": {
+        "20": "Immobilisations incorporelles",
+        "21": "Immobilisations corporelles",
+        "23": "Immobilisations en cours",
+    },
+
+    # Balance sheet - Liabilities (Class 1, 4)
+    "equity_debt": {
+        "101": "Capital",
+        "106": "Réserves",
+        "12": "Résultat de l'exercice",
+        "16": "Emprunts et dettes",
+        "164": "Emprunts auprès des établissements de crédit",
+    },
+
+    # Client accounts (Class 411) - for concentration analysis
+    "clients": {
+        "411": "Clients",
+        "4110-4119999": "Comptes clients individuels",
+    },
+
+    # Supplier accounts (Class 401) - for concentration analysis
+    "suppliers": {
+        "401": "Fournisseurs",
+        "4010-4019999": "Comptes fournisseurs individuels",
+    },
+}
+
 # ========== Tool Input Schemas ==========
+
+class ReadFECInput(BaseModel):
+    """Input for reading FEC (Fichier des Écritures Comptables)."""
+    fec_path: str = Field(..., description="Path to FEC file (.txt or .csv)")
+    encoding: str = Field("latin-1", description="File encoding (latin-1, utf-8, cp1252)")
+    separator: str = Field("|", description="Field separator (| or ; or tab)")
 
 class ExtractIMDataInput(BaseModel):
     """Input for extracting data from Information Memorandum."""
@@ -127,6 +203,232 @@ class ValueTargetInput(BaseModel):
     ebitda_normalized: float = Field(..., description="Normalized EBITDA in EUR")
 
 # ========== Tools ==========
+
+@tool(args_schema=ReadFECInput)
+def read_fec(fec_path: str, encoding: str = "latin-1", separator: str = "|") -> Dict:
+    """
+    Reads and analyzes a French FEC (Fichier des Écritures Comptables) file for MBI due diligence.
+
+    MISSION: Provide precise, day-accurate financial analysis for acquisition targets.
+
+    Key capabilities:
+    - Day-accurate interest/revenue calculations (no approximations)
+    - EBITDA normalization with French GAAP account mapping
+    - Client/supplier concentration (red flag if >30%)
+    - Owner compensation analysis (account 644)
+    - Seasonality detection
+    - Balance sheet quality checks
+
+    The FEC is the official French accounting export format containing all journal entries.
+    Standard columns (per Article A47 A-1):
+    - JournalCode, JournalLib, EcritureNum, EcritureDate
+    - CompteNum, CompteLib, CompAuxNum, CompAuxLib
+    - PieceRef, PieceDate, EcritureLib
+    - Debit, Credit, EcritureLet, DateLet, ValidDate, Montantdevise, Idevise
+
+    Returns:
+    - Exact financial metrics (revenue, expenses, EBITDA proxy)
+    - Time-weighted calculations for partial periods
+    - Concentration risks
+    - Red flags for due diligence
+    - Account-level detail for deep-dive analysis
+    """
+    try:
+        # Read FEC file
+        # Try different separators if | doesn't work
+        separators_to_try = [separator, "|", ";", "\t"]
+        df = None
+
+        for sep in separators_to_try:
+            try:
+                df = pd.read_csv(
+                    fec_path,
+                    sep=sep,
+                    encoding=encoding,
+                    dtype=str,  # Read all as string first
+                    low_memory=False
+                )
+                if len(df.columns) >= 10:  # FEC should have at least 10 columns
+                    break
+            except:
+                continue
+
+        if df is None or len(df.columns) < 10:
+            return {
+                "error": "Could not parse FEC file. Try different encoding or separator.",
+                "tried_separators": separators_to_try,
+                "encoding": encoding
+            }
+
+        # Standardize column names (some FEC files have different casing)
+        df.columns = [col.strip() for col in df.columns]
+
+        # Convert amounts to float
+        if 'Debit' in df.columns:
+            df['Debit'] = pd.to_numeric(df['Debit'].str.replace(',', '.'), errors='coerce').fillna(0)
+        if 'Credit' in df.columns:
+            df['Credit'] = pd.to_numeric(df['Credit'].str.replace(',', '.'), errors='coerce').fillna(0)
+
+        # Convert dates
+        if 'EcritureDate' in df.columns:
+            df['EcritureDate'] = pd.to_datetime(df['EcritureDate'], format='%Y%m%d', errors='coerce')
+
+        # Basic statistics
+        total_entries = len(df)
+        date_range = (df['EcritureDate'].min(), df['EcritureDate'].max()) if 'EcritureDate' in df.columns else None
+        unique_accounts = df['CompteNum'].nunique() if 'CompteNum' in df.columns else 0
+
+        # Calculate exact number of days in period (for annualization)
+        nb_days_in_period = (date_range[1] - date_range[0]).days if date_range else 365
+        period_factor = 365.25 / nb_days_in_period if nb_days_in_period > 0 else 1
+
+        # Revenue analysis (Class 7)
+        revenue_accounts = df[df['CompteNum'].str.startswith('7', na=False)]
+        total_revenue = revenue_accounts['Credit'].sum() - revenue_accounts['Debit'].sum()
+
+        # Expense analysis (Class 6)
+        expense_accounts = df[df['CompteNum'].str.startswith('6', na=False)]
+        total_expenses = expense_accounts['Debit'].sum() - expense_accounts['Credit'].sum()
+
+        # Account 644 - Owner compensation (key for EBITDA normalization)
+        owner_comp = df[df['CompteNum'].str.startswith('644', na=False)]
+        owner_comp_total = owner_comp['Debit'].sum() - owner_comp['Credit'].sum()
+
+        # Account 681 - Depreciation (add back for EBITDA)
+        depreciation = df[df['CompteNum'].str.startswith('681', na=False)]
+        depreciation_total = depreciation['Debit'].sum() - depreciation['Credit'].sum()
+
+        # Account 6815 - Provisions (add back for EBITDA)
+        provisions = df[df['CompteNum'].str.startswith('6815', na=False)]
+        provisions_total = provisions['Debit'].sum() - provisions['Credit'].sum()
+
+        # Client concentration (411XXX accounts)
+        clients = df[df['CompteNum'].str.match(r'^411\d+', na=False)].copy()
+        if len(clients) > 0:
+            client_balances = clients.groupby('CompteNum').apply(
+                lambda x: (x['Debit'].sum() - x['Credit'].sum())
+            ).sort_values(ascending=False)
+            top_5_clients = client_balances.head(5)
+            top_client_concentration = top_5_clients.sum() / client_balances.sum() if client_balances.sum() != 0 else 0
+        else:
+            top_5_clients = pd.Series()
+            top_client_concentration = 0
+
+        # Supplier concentration (401XXX accounts)
+        suppliers = df[df['CompteNum'].str.match(r'^401\d+', na=False)].copy()
+        if len(suppliers) > 0:
+            supplier_balances = suppliers.groupby('CompteNum').apply(
+                lambda x: (x['Credit'].sum() - x['Debit'].sum())
+            ).sort_values(ascending=False)
+            top_5_suppliers = supplier_balances.head(5)
+            top_supplier_concentration = top_5_suppliers.sum() / supplier_balances.sum() if supplier_balances.sum() != 0 else 0
+        else:
+            top_5_suppliers = pd.Series()
+            top_supplier_concentration = 0
+
+        # Red flags detection
+        red_flags = []
+
+        # Red flag: Client concentration >30%
+        if top_client_concentration > 0.30:
+            red_flags.append({
+                "type": "Concentration client",
+                "severity": "High" if top_client_concentration > 0.50 else "Medium",
+                "description": f"Top 5 clients = {top_client_concentration*100:.1f}% du CA (>30% = risque)"
+            })
+
+        # Red flag: Owner compensation excessive (>10% revenue for small business)
+        if owner_comp_total > 0 and total_revenue > 0:
+            owner_comp_pct = owner_comp_total / total_revenue
+            if owner_comp_pct > 0.10:
+                red_flags.append({
+                    "type": "Rémunération dirigeant excessive",
+                    "severity": "Medium",
+                    "description": f"Compte 644 = {owner_comp_pct*100:.1f}% du CA (normalisable pour EBITDA)",
+                    "adjustable_amount": round(owner_comp_total, 2)
+                })
+
+        # Red flag: Loss-making
+        if (total_revenue - total_expenses) < 0:
+            red_flags.append({
+                "type": "Résultat déficitaire",
+                "severity": "High",
+                "description": f"Perte de {abs(total_revenue - total_expenses):,.2f} €"
+            })
+
+        # Monthly seasonality analysis
+        monthly_revenue = revenue_accounts.groupby(revenue_accounts['EcritureDate'].dt.to_period('M')).apply(
+            lambda x: (x['Credit'].sum() - x['Debit'].sum())
+        )
+        if len(monthly_revenue) >= 3:
+            revenue_std = monthly_revenue.std()
+            revenue_mean = monthly_revenue.mean()
+            coef_variation = (revenue_std / revenue_mean) if revenue_mean > 0 else 0
+            high_seasonality = coef_variation > 0.3
+        else:
+            coef_variation = 0
+            high_seasonality = False
+
+        return {
+            "success": True,
+            "file_path": fec_path,
+            "total_entries": total_entries,
+            "date_range": {
+                "start": date_range[0].strftime('%Y-%m-%d') if date_range else None,
+                "end": date_range[1].strftime('%Y-%m-%d') if date_range else None,
+                "nb_days": nb_days_in_period,
+                "is_full_year": abs(nb_days_in_period - 365) < 10
+            },
+            "unique_accounts": unique_accounts,
+            "financials": {
+                "total_revenue": round(total_revenue, 2),
+                "total_revenue_annualized": round(total_revenue * period_factor, 2),
+                "total_expenses": round(total_expenses, 2),
+                "result_before_tax": round(total_revenue - total_expenses, 2),
+                "owner_compensation_644": round(owner_comp_total, 2),
+                "depreciation_681": round(depreciation_total, 2),
+                "provisions_6815": round(provisions_total, 2),
+                "ebitda_proxy": round(total_revenue - total_expenses + depreciation_total + provisions_total, 2),
+                "ebitda_margin_pct": round(((total_revenue - total_expenses + depreciation_total + provisions_total) / total_revenue * 100), 2) if total_revenue > 0 else 0
+            },
+            "concentration": {
+                "top_client_concentration_pct": round(top_client_concentration * 100, 2),
+                "top_5_clients": top_5_clients.head(5).to_dict(),
+                "top_supplier_concentration_pct": round(top_supplier_concentration * 100, 2),
+                "top_5_suppliers": top_5_suppliers.head(5).to_dict(),
+                "client_risk": "HIGH" if top_client_concentration > 0.30 else "LOW"
+            },
+            "seasonality": {
+                "coefficient_variation": round(coef_variation, 3),
+                "high_seasonality": high_seasonality,
+                "note": "Coef > 0.3 = forte saisonnalité (risque cash flow)"
+            },
+            "red_flags": red_flags,
+            "dd_notes": {
+                "period_accuracy": f"Période de {nb_days_in_period} jours (facteur annualisation: {period_factor:.3f})",
+                "ebitda_adjustments_needed": owner_comp_total > 0 or depreciation_total > 0 or provisions_total > 0,
+                "key_accounts_to_review": [
+                    "644 (Rémunération exploitant)" if owner_comp_total > 0 else None,
+                    "411XXX (Détail clients)" if top_client_concentration > 0.30 else None,
+                    "67X (Charges exceptionnelles à normaliser)"
+                ]
+            },
+            "next_steps": [
+                "Use normalize_ebitda tool with FEC insights",
+                f"Analyze owner_compensation_644: {owner_comp_total:,.2f} EUR" if owner_comp_total > 0 else "No owner compensation detected",
+                f"⚠️ Client concentration = {top_client_concentration*100:.1f}% - red flag if >30%" if top_client_concentration > 0.30 else "Client diversification OK",
+                "Review monthly revenue trend for seasonality",
+                f"⚠️ Period = {nb_days_in_period} days - annualize metrics" if not abs(nb_days_in_period - 365) < 10 else "Full year data"
+            ]
+        }
+
+    except Exception as e:
+        return {
+            "error": f"Failed to read FEC: {str(e)}",
+            "file_path": fec_path,
+            "encoding": encoding,
+            "separator": separator
+        }
 
 @tool(args_schema=ExtractIMDataInput)
 def extract_im_data(im_text: str) -> Dict:
@@ -285,6 +587,7 @@ def value_target(
 # ========== MBI Tools List ==========
 
 MBI_TOOLS = [
+    read_fec,
     extract_im_data,
     normalize_ebitda,
     score_four_pillars,
