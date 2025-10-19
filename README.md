@@ -1,12 +1,68 @@
-# Dexter — Agent MBI/Rollup Analyst 🤖
+# Dexter — Votre DG Adjoint pour le Rollup 🤖
 
-Agent autonome d'analyse financière pour **Management Buy-In** et stratégies **Buy & Build** sur PME françaises.
+**Agent IA autonome pour piloter votre stratégie de rollup multi-sectoriel.**
 
-Dexter automatise la due diligence d'acquisition : extraction FEC, normalisation EBITDA (French GAAP), scoring des 4 piliers opérationnels, détection de red flags, et valorisation par multiples sectoriels.
+Nous sommes des **investisseurs-opérateurs** qui construisons un groupe industriel pérenne. Dexter nous assiste sur toutes les phases : sourcing, due diligence, valorisation, négociation, intégration, et déploiement tech.
 
-**Mission :** Analyser 100+ cibles/an avec la rigueur d'un analyste M&A, en 10x moins de temps.
+**Statut actuel :** Recherche de la plateforme initiale.
 
-## 🚀 Quick Start
+---
+
+## 🎯 Notre Positionnement
+
+**Investisseurs-entrepreneurs, pas fonds d'investissement :**
+- Nous investissons ET nous opérons directement
+- Vision long terme : excellence opérationnelle durable
+- Création de valeur par la transformation, pas le multiple financier
+- Implication dans l'intégration et la digitalisation
+
+**Notre conviction :** Les PME françaises vieillissantes à forte récurrence + faible digitalisation = énorme levier de création de valeur par l'excellence opérationnelle.
+
+---
+
+## 💡 Notre Thèse d'Investissement
+
+### Critères Financiers (Qualification)
+- **EBITDA/EBE** : 500k€ - 2M€ (critère principal)
+- **Valeur d'entreprise** : 5M€ - 20M€
+- **Marges** : Saines et démontrées (>10%)
+- **CA** : Pas de critère strict (focus profitabilité)
+
+### 4 Piliers Opérationnels (Essentiels)
+1. ✅ **Opérations répétitives** → Standardisables, automatisables
+2. ✅ **Revenus récurrents** → Contrats, abonnements, missions répétées
+3. ✅ **Faible digitalisation** → Fort levier de transformation
+4. ✅ **Base clients diversifiée** → Pas de concentration (<30% du CA/client)
+
+### Critères de Marché
+- **Marchés fragmentés** : Nombreux acteurs locaux, absence de leader
+- **Business vieillissant** : Gestion artisanale, peu de tech
+- **Géographie** : Grandes métropoles françaises + agglomérations
+
+### Red Flags (Exclusions)
+❌ Déclin structurel du marché
+❌ Concentration client/fournisseur >30%
+❌ Litiges majeurs (prudhommaux, fiscaux)
+❌ Actif immobilier complexe
+❌ Management non-retainable
+
+---
+
+## 🏭 Secteurs Explorés
+
+**Services Techniques Bâtiment :** CVC, Sécurité incendie, Ventilation, IRVE, Chaudières, Toiture, Portes, Légionelles, Diagnostics, Entretien
+
+**Services Techniques Spécialisés :** Véhicules lourds, Cuisine pro, GTA, Certifications énergétiques
+
+**Services Extérieurs :** Installations sportives, Balayeuse, Marquage, Élagage, Paysage, Piscines, Photovoltaïque O&M
+
+**Hygiène & Conformité :** 3D (Dératisation-Désinsectisation-Désinfection)
+
+**Services B2B :** Gestion locative, Courtage assurance, Infogérance RH, Clinique esthétique
+
+---
+
+## 🚀 Installation
 
 ```bash
 git clone https://github.com/ThomasMarcelin754/Agentic-MBI.git
@@ -17,119 +73,84 @@ cp env.example .env
 # Renseigner : ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Test rapide :**
+**Lancer Dexter :**
 ```bash
 uv run dexter-agent
 ```
 
-```python
-# Analyse programmatique
-from dexter.tools_mbi import read_fec
+---
 
-result = read_fec(
-    fec_path="/path/to/FEC.txt",
-    encoding="latin-1",
-    separator="|"
-)
-# → CA, EBITDA, concentration clients, red flags
-```
+## 🤝 Rôle de Dexter
 
-## 🎯 Capacités clés
+Dexter agit comme votre **directeur général adjoint** :
 
-### 1. Extraction multi-format
-- **FEC (priorité)** : Analyse granulaire compte par compte, calculs au jour près
-- **PDF comptable** : PyMuPDF + Haiku → données structurées
-- **Excel** : Balance, Grand Livre via pandas
+### Vision d'ensemble
+- Maintient la cohérence avec la thèse d'investissement
+- Challenge chaque opportunité vs. les 4 piliers
+- Identifie les interdépendances entre phases
+- Propose des approches structurées
 
-### 2. Normalisation EBITDA (French GAAP)
-- Rémunération dirigeant excessive (644)
-- Amortissements (681), provisions (6815)
-- Crédit-bail (612), charges exceptionnelles
-- Ajustements avec confiance (High/Medium/Low)
+### Deep dive sur demande
+- Devient ultra-spécifique et actionnable
+- Fournit templates, checklists, exemples concrets
+- Quantifie et structure les analyses
+- Propose des next steps clairs
 
-### 3. Scoring thèse MBI (4 piliers /40)
-1. Opérations répétitives (automatisables)
-2. Revenus récurrents (contrats, MRR)
-3. Faible digitalisation (levier transformation)
-4. Base clients diversifiée (<30% concentration)
+**Exemples d'interactions :**
+- *"Aide-moi à sourcer des cibles en maintenance CVC sur Lyon"*
+- *"Analyse ce bilan et dis-moi si l'EBITDA est normalisé"*
+- *"Quelle structure de deal proposer pour cette cible à 8M€ ?"*
+- *"Comment automatiser la facturation dans ce secteur ?"*
 
-**Seuil GO : ≥28/40**
+---
 
-### 4. Red flags automatiques
-- Concentration client/fournisseur >30%
-- Déclin structurel marché
-- Litiges majeurs, actif immobilier complexe
-- Management non retainable
-
-### 5. Valorisation
-- **Multiples sectoriels** : 25 secteurs couverts (CVC, IRVE, sécurité...)
-- **Ajustement géographique** : coûts Paris vs. régions
-- **DCF optionnel** : pour cibles à forte croissance
-
-## 📊 Architecture
-
-**Multi-modèles optimisé :**
-- **Claude Sonnet 4.5** : Raisonnement complexe (EBITDA normalization, red flags)
-- **Claude Haiku** : Extraction rapide (PDF parsing, screening)
-
-**Coût moyen :** ~1,50 € / cible analysée
-
-```
-User Query → Agent → [Haiku: extraction] → [Sonnet: analyse] → Report DD
-```
-
-## 📖 Documentation
+## 📚 Documentation
 
 **Pour approfondir :**
 
-- **[Architecture technique](docs/architecture.md)** : Multi-modèles, tools, schemas Pydantic, extensibilité
-- **[Guide due diligence](docs/due_diligence.md)** : 4 piliers, red flags, normalisation EBITDA, workflow J0-J15
-- **[Exemples concrets](docs/examples.md)** : Tests FEC réels, extraction PDF, cas d'usage complets
+- **[Mission & Capacités](docs/mission.md)** : Rôle de Dexter par phase (sourcing, DD, valo, négo, intégration, tech)
+- **[Thèse d'Investissement](docs/thesis.md)** : Critères détaillés, secteurs, scoring, red flags
+- **[Workflows Opérationnels](docs/workflow.md)** : Templates et processus concrets par phase
 
-## 🎯 Secteurs couverts
+---
 
-| Secteur | Multiples EV/EBITDA | Rationale |
-|---------|---------------------|-----------|
-| CVC / maintenance | 6x - 8x - 10x | Services récurrents, fragmentation |
-| Sécurité incendie | 7x - 9x - 11x | Réglementation forte, contrats LT |
-| IRVE (bornes) | 8x - 11x - 14x | Croissance forte, tech |
-| Gestion locative B2B | 8x - 10x - 12x | Revenus très récurrents |
-| Diagnostics | 6x - 8x - 10x | Obligatoire, fragmentation |
-| Élagage / espaces verts | 4.5x - 6.5x - 8.5x | Saisonnalité forte |
-
-**Total : 25 secteurs** (voir `tools_mbi.py:SECTOR_MULTIPLES`)
-
-## 🛠️ Structure projet
+## 🛠️ Structure Projet
 
 ```
 Agentic-MBI/
 ├── src/dexter/
-│   ├── agent.py           # Orchestrateur multi-agent
-│   ├── tools_mbi.py       # Tools DD (read_fec, normalize_ebitda...)
-│   ├── schemas.py         # Pydantic models (TargetCompany, RedFlag...)
-│   ├── prompts_mbi.py     # System prompts
+│   ├── agent.py           # Orchestrateur agent
+│   ├── tools_mbi.py       # Tools spécifiques MBI (FEC, extraction, scoring)
+│   ├── schemas.py         # Modèles de données
+│   ├── prompts_mbi.py     # Prompts système
 │   └── utils/             # CLI, logger
 ├── docs/
-│   ├── architecture.md    # Doc technique
-│   ├── due_diligence.md   # Guide métier
-│   └── examples.md        # Cas d'usage
+│   ├── mission.md         # Rôle et capacités de Dexter
+│   ├── thesis.md          # Thèse d'investissement détaillée
+│   └── workflow.md        # Workflows opérationnels
 └── README.md              # Ce fichier
 ```
 
-## 🚦 Tests validés
+---
 
-✅ **FEC holding TM Capital** : Extraction 391 jours, calculs au jour près, concordance 100% vs PDF
-✅ **PDF Alizé Clim** : PyMuPDF extraction, CA 8.5M€, ROA 22.56%
-✅ **Workflow DD complet** : SecurFire (fictif), scoring 33/40, valorisation 10.2M€
+## 🎯 Stratégie de Création de Valeur
 
-## 🗺️ Roadmap
+### 1. Digitalisation & Automatisation (Cœur)
+- Back-office centralisé
+- Automatisation tâches répétitives
+- Gains de productivité mesurables
 
-- [ ] Support US GAAP / IFRS complet
-- [ ] OCR pour PDFs scannés (Mistral API)
-- [ ] Time-series analysis (3-5 ans)
-- [ ] API Infogreffe pour enrichissement auto
-- [ ] Dashboard Streamlit (monitoring portfolio)
-- [ ] Export rapport DD (Excel/PDF formaté)
+### 2. Excellence Opérationnelle
+- Standardisation des processus
+- Mutualisation des supports (finance, RH, IT, juridique, achats)
+- Pilotage par la data
+
+### 3. Synergies
+- **Commerciales** : Cross-sell, extension géographique
+- **Achats** : Pouvoir de négociation fournisseurs
+- **Financières** : Accès financement, réinvestissement cash
+
+---
 
 ## 📄 Licence
 
@@ -137,4 +158,5 @@ MIT
 
 ---
 
-**Contributeurs :** Thomas Marcelin, Brice (avec Claude Code ⚡)
+**Fondateurs :** Thomas Marcelin, Brice
+**Powered by :** Claude Sonnet 4.5 (raisonnement complexe) + Claude Haiku (extraction rapide)

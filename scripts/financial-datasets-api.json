@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "financial-datasets-api": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.financialdatasets.ai/api"],
+      "headers": {
+        "X-API-KEY": "45e8ff75-9b0c-4302-b77a-088903bba540"
+      }
+    }
+  }
+}
