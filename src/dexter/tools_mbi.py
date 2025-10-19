@@ -7,6 +7,7 @@ from langchain.tools import tool
 from typing import List, Dict, Optional, Literal
 import os
 import pandas as pd
+import requests
 from pydantic import BaseModel, Field
 
 from dexter.schemas import (
@@ -584,6 +585,126 @@ def value_target(
         comparables=[]  # Would be populated by comparable search
     )
 
+# ========== Financial Datasets API Integration ==========
+
+class GetCompanyFinancialsInput(BaseModel):
+    """Input for getting company financials via Financial Datasets API."""
+    ticker: str = Field(..., description="Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'CARR')")
+    period: Optional[str] = Field("annual", description="Period type: 'annual', 'quarterly', or 'ttm'")
+    limit: int = Field(5, description="Number of periods to retrieve (default 5 years)")
+
+@tool(args_schema=GetCompanyFinancialsInput)
+def get_company_financials(
+    ticker: str,
+    period: str = "annual",
+    limit: int = 5
+) -> Dict:
+    """
+    Get financial statements for a public company using Financial Datasets API.
+
+    Useful for:
+    - Benchmarking private target against public comps
+    - Understanding sector margins/multiples
+    - Validating target financials
+
+    Returns:
+    - Income statements (revenue, operating income, net income)
+    - Balance sheets (assets, liabilities, equity)
+    - Cash flow statements
+    - Key ratios and metrics
+
+    Requires FINANCIAL_DATASETS_API_KEY in environment.
+
+    Example tickers:
+    - CARR: Carrier Global (HVAC)
+    - JCI: Johnson Controls (Building tech)
+    - GNRC: Generac (Power systems)
+    - TTEK: Tetra Tech (Infrastructure)
+    """
+    api_key = os.getenv("FINANCIAL_DATASETS_API_KEY")
+
+    if not api_key:
+        return {
+            "error": "FINANCIAL_DATASETS_API_KEY not set",
+            "message": "Add API key to .env file"
+        }
+
+    try:
+        # Financial Datasets API endpoint (all financial statements)
+        url = "https://api.financialdatasets.ai/financials/"
+
+        params = {
+            "ticker": ticker.upper(),
+            "period": period,
+            "limit": limit
+        }
+
+        response = requests.get(
+            url,
+            headers={"X-API-KEY": api_key},
+            params=params,
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+
+            if not data.get("financials"):
+                return {
+                    "error": "No data found",
+                    "message": f"No financial data for ticker {ticker}"
+                }
+
+            # Extract key metrics from latest period
+            latest = data["financials"][0] if data["financials"] else {}
+
+            # Calculate metrics
+            revenue = latest.get("revenue", 0)
+            operating_income = latest.get("operating_income", 0)
+            net_income = latest.get("net_income", 0)
+            total_assets = latest.get("total_assets", 0)
+            total_liabilities = latest.get("total_liabilities", 0)
+            ebitda = latest.get("ebitda", 0)
+
+            # Calculate margins
+            operating_margin = (operating_income / revenue * 100) if revenue > 0 else 0
+            net_margin = (net_income / revenue * 100) if revenue > 0 else 0
+            ebitda_margin = (ebitda / revenue * 100) if revenue > 0 else 0
+
+            return {
+                "success": True,
+                "ticker": ticker.upper(),
+                "period": period,
+                "latest_period": latest.get("period_end_date"),
+                "key_metrics": {
+                    "revenue": revenue,
+                    "ebitda": ebitda,
+                    "operating_income": operating_income,
+                    "net_income": net_income,
+                    "total_assets": total_assets,
+                    "total_liabilities": total_liabilities,
+                    "equity": total_assets - total_liabilities
+                },
+                "margins": {
+                    "ebitda_margin_pct": round(ebitda_margin, 2),
+                    "operating_margin_pct": round(operating_margin, 2),
+                    "net_margin_pct": round(net_margin, 2)
+                },
+                "historical_data": data["financials"],
+                "source": "Financial Datasets API"
+            }
+        else:
+            return {
+                "error": f"API returned status {response.status_code}",
+                "message": response.text[:200]
+            }
+
+    except Exception as e:
+        return {
+            "error": "Failed to fetch financials",
+            "message": str(e)
+        }
+
 # ========== MBI Tools List ==========
 
 MBI_TOOLS = [
@@ -592,5 +713,6 @@ MBI_TOOLS = [
     normalize_ebitda,
     score_four_pillars,
     detect_red_flags,
-    value_target
+    value_target,
+    get_company_financials  # Financial Datasets API integration
 ]
